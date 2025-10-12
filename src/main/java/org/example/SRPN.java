@@ -12,7 +12,7 @@ public class SRPN {
 
     private final LinkedList<String> userInput = new LinkedList<>(); // this acts more like a mini cache, to store values in and check previous values against to help guide the logic flow
     private final Stack<Integer> valueStack = new Stack<>();
-    private final Stack<Integer> randomStack = new Stack<>();
+    private final Stack<Integer> randomStack = new Stack<>(); // similar to userInput, acts as a cache in order to track the flow of the randomSequence numbers
     private final String[] operators = new String[]{"%", "-", "/", "+", "*", "^"};
     private final int[] randomSequence = {
             1804289383, 846930886, 1681692777, 1714636915, 1957747793,
@@ -84,26 +84,26 @@ public class SRPN {
     }
 
     private void processStringItem(String s) throws IOException {
-        boolean isOverflow = valueStack.size() == 22; // maximum stack size is 22, so anything lower than this can be pushed
+        boolean hasReachedOverflow = valueStack.size() == 23; // maximum stack size is 23, so anything lower than this can be pushed
         boolean isNumber = s.matches("-?\\d+") || s.matches("r");
-        if (isOverflow && isNumber){
+        if (hasReachedOverflow && isNumber){
             System.out.println("Stack overflow.");
         } else {
             if (s.matches("-?\\d+")){
                 valueStack.push(Integer.parseInt(s));
-            } else if (isOperator(s) && !isOverflow){ // once an operator is reached, it will perform a calculation
+            } else if (isOperator(s) && !hasReachedOverflow){ // once an operator is reached, it will perform a calculation
                 operator = s;
                 handleOperation(operator); // performs calculation upon an operator being reached in the input chain
             } else if (s.matches("d")){
                 valueStack.forEach(System.out::println); // handles an input of d which prints every value from the input thus far
             } else if (s.matches("r")){
-                int index = 0;
-                if (!randomStack.empty()) {
-                    index = randomStack.size(); // size of the stack is equivalent to the number of the sequence
-                }
-                randomStack.push(randomSequence[index]);
-                valueStack.push(randomSequence[index]);
-            } else if (s.matches("=") && !isOverflow){
+                int index = randomStack.empty() ? 0 : randomStack.size(); // if the random stack is empty, index set to 0, otherwise it is equal to the size of the stack
+                int value = (index < 22) ? randomSequence[index] : randomSequence[0]; // the value is determined by the index if the index val is under the overflow val, otherwise will return the first in the sequence
+                // value pushed to both:
+                randomStack.push(value); // 1: random stack - in order to track the order of numbers in parallel with user input
+                valueStack.push(value); // 2: to the value stack - for calculation or output
+
+            } else if (s.matches("=") && !hasReachedOverflow){
                 boolean isPowerEqualsCombo = userInput.get(userInput.size()-2).equals("^");
                 if (isPowerEqualsCombo) {
                     List<String> listOfInts = userInput.stream().filter(str -> str.matches("\\d+")).toList();
