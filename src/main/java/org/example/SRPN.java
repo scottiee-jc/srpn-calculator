@@ -10,10 +10,37 @@ import java.util.*;
 
 public class SRPN {
 
-    private final LinkedList<String> userInput = new LinkedList<>(); // this acts more like a mini cache, to store values in and check previous values against to help guide the logic flow
+    /**
+     * userInput a list used to store each user input. This is mostly used within the code like a cache:
+        * Assists with scenarios like the ^= operation, where SRPN returns the last integer in the stack instead of doing a calculation
+        * Keeps track of ALL recorded values
+        * Instantiated as a final field because only operations will be performed on this ArrayList
+            * It is important for the functionality of the field that it cannot be reassigned - otherwise the values could be replaced
+     */
+    private final LinkedList<String> userInput = new LinkedList<>();
+    /**
+     * valueStack holds the values in which calculations will be performed on, and/or outputted as the result
+        * The Stack type is used as it allows utilisation of LIFO (last-in-first-out) logic
+            * This allows for use of helpful FILO methods such as push(), pop(), peek(), which are used frequently in this program
+            * Also means instead of having to find the last index as in ArrayLists (arr.size-1), you can simply use lastElement(), which enhances readability
+     */
     private final Stack<Integer> valueStack = new Stack<>();
     private final Stack<Integer> randomStack = new Stack<>(); // similar to userInput, acts as a cache in order to track the flow of the randomSequence numbers
+
+    /**
+     * operators is a String array used for the sole purpose of validating the string input against these signs
+        * Final as it should not be modified or reassigned.
+     */
     private final String[] operators = new String[]{"%", "-", "/", "+", "*", "^"};
+
+    /**
+     * randomSequence is specifically designed to handle the 'r' case:
+        * The set of integers displayed in the srpn program were the same each time and repeated in the same sequence
+        * Therefore, it made sense to create an array:
+            * Made it final as this is a fixed set of values that should not be changed, only accessed
+            * int as they all sit within the integer range of -2^31 to 2^31-1.
+            * Sorted so it can be iterated over
+     */
     private final int[] randomSequence = {
             1804289383, 846930886, 1681692777, 1714636915, 1957747793,
             424238335, 719885386, 1649760492, 596516649, 1189641421,
@@ -21,13 +48,54 @@ public class SRPN {
             1967513926, 1365180540, 1540383426, 304089172, 1303455736,
             35005211, 521595368
     };
-    private String operator;
+
+    private final SRPNUtil srpnUtility = new SRPNUtil();
 
     public void processCommand(String s) throws IOException {
         if (s.matches("^.{2,}$")) {  // matches more than 1 character
+
+            // need to process 2 scenarios here regarding whitespaces:
+            // negative numbers - spaces between '-' operator and digit are crucial
+            // same for positive - +4 will actually add them to the previous number, so needs to be placed AFTER the number in processing
+            // for ^=, the last digit will be printed but not added, whilst the rest of the equation will execute as normal
+            char[] chars = s.toCharArray();
+
+            for (int i = chars.length-1; i > 0; i--) {
+                if (chars[i] == '=' && chars[i-1] == '^') {
+                    char precedingChar = chars[i-2];
+                    if (Character.isDigit(precedingChar)){
+                        s = s.replace("=", "");
+                        System.out.println(chars[precedingChar]);
+                    } else if (Character.isWhitespace(precedingChar) && Character.isDigit(chars[i-3])){
+                        s = s.replace("=", "");
+                        System.out.println(chars[i-3]);
+                    }
+                }
+            }
+
+
+            if (srpnUtility.isPowEquals(chars)) {
+                for (int i = 0; i < chars.length - 3; i++) {
+                    if (Character.isDigit(chars[i])) {
+                        char next = chars[i + 1];
+                        char next2 = chars[i + 2];
+                        char next3 = chars[i + 3];
+
+                        boolean isDirectPowEquals = isOperator(String.valueOf(next)) && next2 == '=';
+                        boolean isSpacedPowEquals = Character.isWhitespace(next) && next2 == '^' && next3 == '=';
+
+                        if (isDirectPowEquals && (isDirectPowEquals || isSpacedPowEquals)) {
+                            s = s.replace("=", ""); // replaceAll not needed for single char
+                            System.out.println(chars[i]);
+                        }
+                    }
+                }
+            }
+
+
             String commentFreeString = s.replaceAll("#(.*?)#", "").replace("#","").trim();  // any characters caught between # will be removed, as well as the # signs, then remove all whitespaces
             if (!commentFreeString.isEmpty()){
-                char[] chars = commentFreeString.toCharArray();
+                chars = commentFreeString.toCharArray();
                 if (chars.length == 1){ //checks if it is a single digit or single character
                     userInput.add(s); // add it to the "cached" history of inputs
                     processStringItem(s); // if it is, it can process the char / digit
@@ -40,41 +108,51 @@ public class SRPN {
         }
     }
 
+    // two things to add:
+    //1: scenario with ^= - processes at the LINE level
+//    boolean isPowerEqualsCombo = userInput.get(userInput.size()-2).equals("^"); // in scenarios in which ^= are recorded, the calculator will print the last recorded value
+//                    if (isPowerEqualsCombo) {
+//                        System.out.println(valueStack.peek()); // prints the last value in the stack
+//
+//
+
     private void processLine(char[] chars) throws IOException {
         List<String> word = new ArrayList<>();
-        String character; // the full character
+
         for (int i = 0; i < chars.length; i++) {
-            character = String.valueOf(chars[i]); // selects first char
-            boolean isWhitespace = character.matches("\\s+");
-            if (character.matches("\\d+")) {
-                word.add(character);
-                if (i == chars.length-1){
-                    String number = stringBuilder(word);
-                    userInput.add(number);
-                    processStringItem(number);
-                    word.clear();
+            char character = chars[i]; // selects first char
+            boolean isWhitespace = Character.isWhitespace(character);
+            boolean isDigit = Character.isDigit(character);
+
+            if (isDigit) {
+                word.add(String.valueOf(character)); // will add digit to a word "list" until either an operator or whitespace is reached
+                if (i == chars.length-1) { // if i reaches the end of the chain, will save and process the final char
+                    buildAndFlushWord(word);
                 }
-            } else if ((isOperator(character)) || isWhitespace) {
-                if (i == 0){
-                    word.add(character);
-                } else {
-                    if (!word.isEmpty()) {
-                        String number = stringBuilder(word);
-                        userInput.add(number);
-                        processStringItem(number);
-                        word.clear();
-                    }
-                    if (!isWhitespace){
-                        userInput.add(character);
-                        processStringItem(character);
-                    }
+            } else if (isOperator(String.valueOf(character)) || isWhitespace) {
+                if (i != 0 && !word.isEmpty()) { // if its not the first char and the word is not empty, it will save and process the char, then move on
+                    buildAndFlushWord(word);
+                }
+                if (!isWhitespace) { // if it is not a whitespace, it must be an operator (by default), so it saves and processes the char
+                    String operator = String.valueOf(character);
+                    userInput.add(operator);
+                    processStringItem(operator);
                 }
             } else {
-                userInput.add(character);
-                processStringItem(character);
+                String otherChar = String.valueOf(character); // any other char will be processed at the next stage
+                userInput.add(otherChar);
+                processStringItem(otherChar);
             }
         }
     }
+
+    private void buildAndFlushWord(List<String> word) throws IOException {
+        String number = stringBuilder(word);
+        userInput.add(number);
+        processStringItem(number);
+        word.clear();
+    }
+
     private String stringBuilder(List<String> word) throws IOException {
         StringBuilder wordBuilder = new StringBuilder();
         for (String s : word) {
@@ -92,9 +170,11 @@ public class SRPN {
             if (s.matches("-?\\d+")){
                 valueStack.push(Integer.parseInt(s));
             } else if (isOperator(s) && !hasReachedOverflow){ // once an operator is reached, it will perform a calculation
-                operator = s;
-                handleOperation(operator); // performs calculation upon an operator being reached in the input chain
+                handleOperation(s); // performs calculation upon an operator being reached in the input chain
             } else if (s.matches("d")){
+                if (valueStack.empty()){
+                    System.out.println(Integer.MIN_VALUE); // Scenario where there are no values present, inputting d will print min value
+                }
                 valueStack.forEach(System.out::println); // handles an input of d which prints every value from the input thus far
             } else if (s.matches("r")){
                 int index = randomStack.empty() ? 0 : randomStack.size(); // if the random stack is empty, index set to 0, otherwise it is equal to the size of the stack
@@ -104,10 +184,8 @@ public class SRPN {
                 valueStack.push(value); // 2: to the value stack - for calculation or output
 
             } else if (s.matches("=") && !hasReachedOverflow){
-                boolean isPowerEqualsCombo = userInput.get(userInput.size()-2).equals("^");
-                if (isPowerEqualsCombo) {
-                    List<String> listOfInts = userInput.stream().filter(str -> str.matches("\\d+")).toList();
-                    System.out.println(listOfInts.get(listOfInts.size()-1));
+                if (valueStack.empty()){
+                    System.out.println("Stack empty."); // if = sign and no values in the stack, prints "Stack empty."
                 } else {
                     System.out.println(valueStack.peek()); // if there is only 1 item left in the stack, this is the result
                 }
@@ -118,35 +196,45 @@ public class SRPN {
         }
     }
 
+    /**
+     * This method
+     * This method will only "pop" the values from the stack IF a valid calculation can be performed, i.e. if it's not a negative power, or dividing by zero.
+     * @param operator
+     */
 
     private void handleOperation(String operator) throws IOException {
-        int numOfIntegers = valueStack.size(); // instantiate new local variable for readability rather than writing more verbose method call on valuestack field.
-        int penultimate = userInput.size()-2; // int val of the penultimate position in the user input chain.
-        boolean isValidOperation = (numOfIntegers >= 2 && !isOperator(userInput.get(penultimate))) ||
-                (numOfIntegers >= 2 && isOperator(userInput.get(penultimate)) &&
-                        userInput.get(penultimate - 1).matches("-?\\d+"));
-        if (isValidOperation) { // at least 2 values must be present to perform calculation and the penultimate val must not be an operator
-            int valB = valueStack.pop(); // returns the object at the top of the stack, which is the second number in the equation
-            int valA = valueStack.pop(); // then returns value A, which is the first number in the equation
-            if (isZero(valA, valB, operator)){ // handles situations where val a or b is 0 - reproduces srpn "Divide by 0." response
+        if (isValidOperation()) { // at least 2 values must be present to perform calculation and the penultimate val must not be an operator
+            if (isResultZero(valueStack.get(valueStack.size()-2), valueStack.peek(), operator)){
                 System.out.println("Divide by 0.");
-            } else if (operator.equals("^") && valB < 0){ // handles situations where value b is a negative integer - should reproduce srpn "Negative power." response
+            } else if (operator.equals("^") && valueStack.peek() < 0){ // handles situations where value b is a negative integer - should reproduce srpn "Negative power." response
                 System.out.println("Negative power.");
             } else {
+                int valB = valueStack.pop(); // returns the object at the top of the stack, which is the second number in the equation
+                int valA = valueStack.pop(); // then returns value A, which is the first number in the equation
                 valueStack.push(performCalculation(valA, valB, operator)); // if neither of these negative cases are met, it will push the result performed by the calculation to the stack
             }
         } else {
-            if (operator.equals("^") && numOfIntegers == 1) { // handles scenario where there is one integer in the stack and it is followed by a "^" operator
-                if (valueStack.lastElement() > 0) { // ONLY performs n^2 if it is a number greater than 0
-                    int val = valueStack.lastElement();
-                    valueStack.push((val * val));
-                }
-            } else if (valueStack.lastElement() < 0) {
-                System.out.println("Negative power."); // if it is less than 0, the output should be "Negative power"
-            } else {
-                System.out.println("Stack underflow."); // Any other scenario produces "Stack underflow."
-            }
+            System.out.println("Stack underflow."); // Any other scenario produces "Stack underflow."
         }
+    }
+
+    private boolean isResultZero(int valueA, int valueB, String operator){
+        return (valueA == 0 || valueB == 0) && operator.equals("/");
+    }
+
+    /**
+     * isValidOperation returns a boolean value based on the current state of the userInput and valueStack collections
+        * Encapsulating the logic in a separate method: allows the details of the validation to be separated from its caller method, also resulting in better readability
+     * The method has two key components to its validation:
+        * 1: if the penultimate value from userInput is NOT an operator and the number of values in the stack are equal to or greater than 2, its a valid operation
+            * Any less than 2 values
+        * 2: if the penultimate value from userInput IS an operator AND the value preceding that matches the regex pattern of a digit (negative or positive), it is also valid
+        * 3: a minimum stack size value of 2 must be present for the operation to be valid in both cases
+     */
+    private boolean isValidOperation() {
+        int numOfIntegers = valueStack.size(); // instantiate new local variable for readability rather than writing more verbose method call on valueStack field.
+        int penultimate = userInput.size()-2; // int val of the penultimate position in the user input chain.
+        return numOfIntegers >= 2;
     }
 
     private int performCalculation(int valueA, int valueB, String operator) throws IOException {
@@ -162,7 +250,8 @@ public class SRPN {
                 case "/" -> !exceedsMax ? valueA / valueB : isMax ? Integer.MAX_VALUE : Integer.MIN_VALUE;
                 case "-" -> !exceedsMax && !exceedsMin
                                 ? valueA - valueB : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
-                case "^" -> !exceedsMax ? (int) Math.pow(valueA, valueB) : Integer.MAX_VALUE;
+                case "^" -> !exceedsMax && !exceedsMin
+                                ? (int) Math.pow(valueA, valueB) : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
                 default -> !exceedsMax && !exceedsMin
                                 ? valueA + valueB : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
             };
@@ -179,18 +268,20 @@ public class SRPN {
         return isOperator;
     }
 
+    /**
+     * Function designed to take two integers and an operator and return true or false based on whether the result of the calculation exceeds the minimum integer value
+        * Only takes into account subtraction, addition and multiplication
+        * Values must be cast to long as the result must be compared to the min value of an integer (-2^31), so must be able to pass this threshold to validate the boolean condition
+        * Dividing two numbers can never reach below min val, neither can modulus, so these are excluded
+     */
     private boolean exceedsMinValue(int valA, int valB, String operator){
         return switch (operator) {
             case "*" -> (long) valA * (long) valB < Integer.MIN_VALUE;
             case "+" -> (long) valA + (long) valB < Integer.MIN_VALUE;
             case "-" -> (long) valA - (long) valB < Integer.MIN_VALUE;
+            case "^" -> (long) Math.pow(valA, valB) < Integer.MIN_VALUE; // Utilise the pow() function to process the result
             default -> false;
-            // dividing two numbers can never reach below min val, neither can modulus
         };
-    }
-
-    private boolean isZero(int valA, int valB, String operator){
-        return operator.equals("/") && valB == 0 || valA == 0;
     }
 
     private boolean exceedsMaxValue(int valA, int valB, String operator) {
