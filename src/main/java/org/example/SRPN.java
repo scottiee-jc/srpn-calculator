@@ -74,26 +74,7 @@ public class SRPN {
             }
 
 
-            if (srpnUtility.isPowEquals(chars)) {
-                for (int i = 0; i < chars.length - 3; i++) {
-                    if (Character.isDigit(chars[i])) {
-                        char next = chars[i + 1];
-                        char next2 = chars[i + 2];
-                        char next3 = chars[i + 3];
-
-                        boolean isDirectPowEquals = isOperator(String.valueOf(next)) && next2 == '=';
-                        boolean isSpacedPowEquals = Character.isWhitespace(next) && next2 == '^' && next3 == '=';
-
-                        if (isDirectPowEquals && (isDirectPowEquals || isSpacedPowEquals)) {
-                            s = s.replace("=", ""); // replaceAll not needed for single char
-                            System.out.println(chars[i]);
-                        }
-                    }
-                }
-            }
-
-
-            String commentFreeString = s.replaceAll("#(.*?)#", "").replace("#","").trim();  // any characters caught between # will be removed, as well as the # signs, then remove all whitespaces
+            String commentFreeString = s.replaceAll("#(.*?)#", "").replace("#","").trim();  // any characters caught between # will be removed, as well as the # signs, then trim
             if (!commentFreeString.isEmpty()){
                 chars = commentFreeString.toCharArray();
                 if (chars.length == 1){ //checks if it is a single digit or single character
@@ -123,6 +104,8 @@ public class SRPN {
             char character = chars[i]; // selects first char
             boolean isWhitespace = Character.isWhitespace(character);
             boolean isDigit = Character.isDigit(character);
+            boolean nextIsDigit = i + 1 < chars.length && Character.isDigit(chars[i + 1]); // makes sure next char is digit and has not reached end of array
+
 
             if (isDigit) {
                 word.add(String.valueOf(character)); // will add digit to a word "list" until either an operator or whitespace is reached
@@ -134,9 +117,22 @@ public class SRPN {
                     buildAndFlushWord(word);
                 }
                 if (!isWhitespace) { // if it is not a whitespace, it must be an operator (by default), so it saves and processes the char
-                    String operator = String.valueOf(character);
-                    userInput.add(operator);
-                    processStringItem(operator);
+
+                    if (character == '-' && nextIsDigit){
+                        word.add(String.valueOf(character)); // for negative values, will not process '-' character as a subtraction
+                    } else {
+
+                        if (character == '+' && nextIsDigit){ // if there is a + sign prior to digit with no whitespace in between, treat as addition functionality
+                            String digit = String.valueOf(chars[i+1]); // processes the digit first
+                            userInput.add(digit);
+                            processStringItem(digit);
+                            i++; // now that digit has been processed, needs to be skipped in the loop
+                        }
+                        // THEN processes operator
+                        String operator = String.valueOf(character);
+                        userInput.add(operator);
+                        processStringItem(operator);
+                    }
                 }
             } else {
                 String otherChar = String.valueOf(character); // any other char will be processed at the next stage
