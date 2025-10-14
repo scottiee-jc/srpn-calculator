@@ -87,16 +87,24 @@ public class SRPN {
     }
 
     /**
-     * processLine
-     *
+     * processLine handles scenarios in which there is more than one character on a single line of user input.
+     * The method iterates through every char in the array passed to it, and processes the input according to the following rules:
+        * 1: Is there a digit?
+            * If so, check if it is at the end of the array, and if so, build the word - if not, add the char to "word" array and continue the loop
+        * 2: Is there an operator, or a whitespace?
+            * a: Operator - checks if the character immediately after a '-' or '+' is a digit, and if so, treats as a negative number for the former, and the latter processes the digit first then applies the addition operator
+            * b: Whitespace - checks if it is the first character and "word" is not empty - if this condition is true, it will call buildAndFlushWord to send the word to be processed.
+                * this is because whitespaces should not be processed, and also helps distinguish whether numbers consist of single or multiple digits
+        * 3: Any other character will be processed separately, for instance "=", "r" or "d"
+     * Attempts to abstract logic from its parent method whilst organising the more complex logic of processing a line under one clear responsibility, therefore satisfying OOP and SOLID principles
      */
 
     private void processLine(char[] chars) throws IOException {
         List<String> word = new ArrayList<>();
 
-        for (int i = 0; i < chars.length; i++) {
+        for (int i = 0; i < chars.length; i++) { // Loop to iterate through the length of the array, selecting each char individually
             char character = chars[i]; // selects first char
-            boolean isWhitespace = Character.isWhitespace(character);
+            boolean isWhitespace = Character.isWhitespace(character); // uses inbuilt Character type method to check if it is a whitespace
             boolean isDigit = Character.isDigit(character);
             boolean nextIsDigit = i + 1 < chars.length && Character.isDigit(chars[i + 1]); // makes sure next char is digit and has not reached end of array
 
@@ -104,7 +112,7 @@ public class SRPN {
             if (isDigit) {
                 word.add(String.valueOf(character)); // will add digit to a word "list" until either an operator or whitespace is reached
                 if (i == chars.length-1) { // if i reaches the end of the chain, will save and process the final char
-                    buildAndFlushWord(word);
+                    buildAndFlushWord(word); // processes the word
                 }
             } else if (isOperator(String.valueOf(character)) || isWhitespace) {
                 if (i != 0 && !word.isEmpty()) { // if its not the first char and the word is not empty, it will save and process the char, then move on
@@ -112,7 +120,7 @@ public class SRPN {
                 }
                 if (!isWhitespace) { // if it is not a whitespace, it must be an operator (by default), so it saves and processes the char
 
-                    if (character == '-' && nextIsDigit){
+                    if (character == '-' && nextIsDigit){ // checks that the next value is a digit - if so, its a negative value
                         word.add(String.valueOf(character)); // for negative values, will not process '-' character as a subtraction
                     } else {
 
@@ -136,10 +144,20 @@ public class SRPN {
         }
     }
 
+    /**
+     * processStringItem is the next component to advance the logic flow - this abstracts the many conditions surrounding specific character/string validation and processing
+        * 1: for any digit based value, it is pushed to the valueStack
+        * 2: for any operators when the stack has not reached 23 - the overflow amount - it calls the handleOperation method to handle the next phase
+        * 3: if s matches 'd', it emulates the srpn function of printing out every value present in the stack - unless it is empty, where it prints out the min integer value
+        * 4: if s matches 'r', it uses the stream API from java 8 onwards to locate how many counts of 'r' have been recorded in the user input and calculates its index position in randomSequence based on this
+        * 5: once s equals '=' it will check for an empty valueStack, otherwise it will print the last item in the stack - i.e. the most recent calculation or value
+        * 6: if none of these values are satisfied, the string is invalid and returns a logged message
+     *
+     */
     private void processStringItem(String s) throws IOException {
         boolean hasReachedOverflow = valueStack.size() == 23; // maximum stack size is 23, so anything lower than this can be pushed
         boolean isNumber = s.matches("-?\\d+") || s.matches("r");
-        if (hasReachedOverflow && isNumber){
+        if (hasReachedOverflow && isNumber){ // if stackoverflow is reached, srpn will print "Stack overflow."
             System.out.println("Stack overflow.");
         } else {
             if (s.matches("-?\\d+")){
@@ -154,7 +172,7 @@ public class SRPN {
             } else if (s.matches("r")){
                 List<String> listOfRandoms = userInput.stream()
                         .filter(string -> string.matches("r"))
-                        .toList(); // filters by inputs that match "r"
+                        .toList(); // filters by inputs that match "r" and adds to a list
                 int index = listOfRandoms.size() == 1 ? 0 : listOfRandoms.size()-1; // if the random stack is empty, index set to 0, otherwise it is equal to the size of the stack
                 int value = (index < 22) ? randomSequence[index] : randomSequence[0]; // the value is determined by the index if the index val is under the overflow val, otherwise will return the first in the sequence
                 valueStack.push(value); // value pushed to stack
@@ -162,7 +180,7 @@ public class SRPN {
                 if (valueStack.empty()){
                     System.out.println("Stack empty."); // if = sign and no values in the stack, prints "Stack empty."
                 } else {
-                    System.out.println(valueStack.peek()); // if there is only 1 item left in the stack, this is the result
+                    System.out.println(valueStack.peek()); // prints the last value as this is either the result or the latest value
                 }
             } else {
                 System.out.println("Unrecognised operator or operand " + "\"" + s + "\"");
@@ -171,9 +189,11 @@ public class SRPN {
     }
 
     /**
-     * This method
-     * This method will only "pop" the values from the stack IF a valid calculation can be performed, i.e. if it's not a negative power, or dividing by zero.
-     * @param operator
+     * This method is called when an operator has been reached, triggering a calculation.
+        * It checks first if there are equal to or more than 2 values in the stack - this needs to happen to perform calculation, otherwise prints "Stack underflow."
+        * If so and the result is zero, it prints Divide by 0 - see that method for more.
+        * Negative power scenario is reached when the last digit in the stack is negative and the power operator is being applied.
+        * If neither of these scenarios are met, the two values from the top of the stack are removed via pop(), and the result of performCalculation function is pushed to the value stack in their place
      */
 
     private void handleOperation(String operator) throws IOException {
@@ -192,13 +212,19 @@ public class SRPN {
         }
     }
 
+    /**
+     * buildAndFlushWord is utilised by processLine method to save the value to userInput list and then process the word, before clearing it for the next entry
+     */
     private void buildAndFlushWord(List<String> word) throws IOException {
-        String number = stringBuilder(word);
-        userInput.add(number);
-        processStringItem(number);
+        String val = stringBuilder(word);
+        userInput.add(val);
+        processStringItem(val);
         word.clear();
     }
 
+    /**
+     * stringBuilder constructs a new string from every character added in processLine to form a new word (e.g. 1,1 will become 11)
+     */
     private String stringBuilder(List<String> word) {
         StringBuilder wordBuilder = new StringBuilder();
         for (String s : word) {
@@ -207,18 +233,23 @@ public class SRPN {
         return wordBuilder.toString();
     }
 
+    /**
+     * The power equals scenario handles the scenario where the ^= functionality in srpn returns the last value in the stack
+     * Called in the parent function processCommand - See line by line comment for breakdown
+     * This method matches the srpn functionality so that the trailing char behind ^= is printed if it is a digit, removes = so it doesn't print the value calculated after the ^ sign is applied to the valueStack values
+     */
     private String handlePowerEqualsScenario(String s){
-        char[] chars = s.toCharArray();
+        char[] chars = s.toCharArray(); // first, converts the whole line to a char array so it can be iterated through
 
-        for (int i = chars.length-1; i > 0; i--) {
-            if (chars[i] == '=' && chars[i-1] == '^') {
-                char precedingChar = chars[i-2];
-                if (Character.isDigit(precedingChar)){
+        for (int i = chars.length-1; i > 0; i--) { // iteration begins at the end of the array first, as = is typically found at the end of an input
+            if (chars[i] == '=' && chars[i-1] == '^') { // if the current index is = and the character before that is "^", loop advances
+                char trailingChar = chars[i-2]; // now selects the character 2 spaces earlier than the current
+                if (Character.isDigit(trailingChar)){ // checks if it is a digit
+                    s = s.replace("=", ""); // if so, replaces = with a whitespace so it isn't processed
+                    System.out.println(chars[trailingChar]); // prints out the digit behind ^=
+                } else if (Character.isWhitespace(trailingChar) && Character.isDigit(chars[i-3])){ // if it is a whitespace before the ^= sign, it checks if the char behind that is a digit or not
                     s = s.replace("=", "");
-                    System.out.println(chars[precedingChar]);
-                } else if (Character.isWhitespace(precedingChar) && Character.isDigit(chars[i-3])){
-                    s = s.replace("=", "");
-                    System.out.println(chars[i-3]);
+                    System.out.println(chars[i-3]);// if so, prints that char and removes = from the sequence
                 }
             }
         }
@@ -240,11 +271,29 @@ public class SRPN {
         return isOperator;
     }
 
+    /**
+     * Handles cases in which either value is 0 and the operator is division
+     */
     private boolean isResultZero(int valueA, int valueB, String operator){
         return (valueA == 0 || valueB == 0) && operator.equals("/");
     }
 
-    private int performCalculation(int valueA, int valueB, String operator) throws IOException {
+    /**
+     * performCalculation is the method that handles mathematical operations within the program, using a variety of validations to achieve the correct result.
+        * There are 4 boolean values:
+            * isMax - determines whether either value is equal to the maximum integer value - true if so, false if not.
+            * isMin - same as isMax but for minimum integer value - true if so, false if not.
+            * exceedsMaxValue - determines whether the result of the calculation will exceed the max value before the calculation is actually performed.
+            * exceedsMinValue - similarly to exceedsMaxValue, checks the result against the minimum integer value for specific operators only.
+                * Abstracting this logic into separate methods helps keep the logic readable and clean.
+        * This method also utilises a switch implementation as opposed to using "if-else" statements, which contributes to greater readability whilst providing similar functionality in this case.
+        * Use of ternary operators in the return cases instead of using the verbose "if-else" approach to switch implementation.
+     * @param valueA - the first integer in the equation
+     * @param valueB - the second integer in the equation
+     * @param operator - the mathematical operation to be performed on the two integers
+     * @return the result of the calculation
+     */
+    private int performCalculation(int valueA, int valueB, String operator) {
         boolean isMax = Integer.MAX_VALUE == valueA || Integer.MAX_VALUE == valueB;
         boolean isMin = Integer.MIN_VALUE == valueA || Integer.MIN_VALUE == valueB;
         boolean exceedsMax = exceedsMaxValue(valueA, valueB, operator);
@@ -252,23 +301,23 @@ public class SRPN {
             return switch (operator) {
                 case "%" -> !isMax && !isMin ? valueA % valueB  // if not max or min values, return the remainder of the operation
                                 : isMax ? Integer.MAX_VALUE : Integer.MIN_VALUE; // if not, return max value if one val = max val, or return min value otherwise
-                case "*" ->  !exceedsMax && !exceedsMin //
-                                ? valueA * valueB : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
-                case "/" -> !exceedsMax ? valueA / valueB : isMax ? Integer.MAX_VALUE : Integer.MIN_VALUE;
-                case "-" -> !exceedsMax && !exceedsMin
-                                ? valueA - valueB : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
-                case "^" -> !exceedsMax && !exceedsMin
-                                ? (int) Math.pow(valueA, valueB) : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
-                default -> !exceedsMax && !exceedsMin
-                                ? valueA + valueB : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+                case "*" ->  !exceedsMax && !exceedsMin ? valueA * valueB // if the result of the calculation exceeds neither max or min values, return a * b
+                                : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE; // in the case either value exceeds max val / result of both exeeds it, return max value, otherwise return min value
+                case "/" -> !exceedsMax ? valueA / valueB : isMax ? Integer.MAX_VALUE : 0; // min value not possible to be exceeded, so unless it exceeds max value, returns a / b, or 0.
+                case "-" -> !exceedsMax && !exceedsMin ? valueA - valueB // returns result of a - b if neither max or min value are exceeded
+                                : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE; // otherwise, if either val / their result exceeds max, return max int, otherwise return min int val
+                case "^" -> !exceedsMax && !exceedsMin ? (int) Math.pow(valueA, valueB) // uses inbuilt Math.pow() function to calculate a ^ b - cast to an int
+                                : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+                default -> !exceedsMax && !exceedsMin // default value is set to addition, as this is the last remaining case - can't be any other operator because it has already been validated against operator array of vals
+                                ? valueA + valueB : (isMax || exceedsMax) ? Integer.MAX_VALUE : Integer.MIN_VALUE; // primary scenario returns a + b if validated
             };
     }
 
     /**
-     * Function designed to take two integers and an operator and return true or false based on whether the result of the calculation exceeds the minimum integer value
-        * Only takes into account subtraction, addition and multiplication
-        * Values must be cast to long as the result must be compared to the min value of an integer (-2^31), so must be able to pass this threshold to validate the boolean condition
-        * Dividing two numbers can never reach below min val, neither can modulus, so these are excluded
+     * Function designed to take two integers and an operator and return true or false based on whether the result of the calculation exceeds the minimum integer value.
+        * Only takes into account subtraction, addition and multiplication.
+        * Values must be cast to long as the result must be compared to the min value of an integer (-2^31), so must be able to pass this threshold to validate the boolean condition.
+        * Dividing two numbers can never reach below min val, neither can modulus, so these are excluded.
      */
     private boolean exceedsMinValue(int valA, int valB, String operator){
         return switch (operator) {
@@ -280,6 +329,12 @@ public class SRPN {
         };
     }
 
+    /**
+     * Similar to exceedsMinValue, returns true or false based on whether the result of the calculation exceeds Max integer value.
+     * Logic is extracted away from performCalculation to enhance modularisation and delegation of logic flow .
+     * Modulus is excluded as two numbers applied against the modulus operator can never reach max val
+     */
+
     private boolean exceedsMaxValue(int valA, int valB, String operator) {
         // casting each value to long so that the calculation can occur
         return switch (operator) {
@@ -289,7 +344,6 @@ public class SRPN {
             case "-" -> (long) valA - (long) valB > Integer.MAX_VALUE;
             case "^" -> (long) Math.pow(valA, valB) > Integer.MAX_VALUE;
             default -> false;
-            // two numbers applied against the modulus operator can never reach max val
         };
     }
 }
